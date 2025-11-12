@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Visual Studio Code
+.vscode
+
+# Virtualenv
+venv
+
+# Downloaded datasets
+datasets
+
+# Models
+my_*
