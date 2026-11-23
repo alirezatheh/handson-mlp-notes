@@ -1319,7 +1319,7 @@ def convert_notebook(
     chrome: Path,
     figure_widths: dict[str, float],
     font_css: str,
-) -> None:
+) -> bool:
     """
     Converts a notebook into a book-like PDF.
 
@@ -1335,6 +1335,11 @@ def convert_notebook(
         Figure widths (pt) indexed by the MD5 hash of the image file
     font_css:
         The ``@font-face`` rules returned by ``font_face_css``
+
+    Returns
+    -------
+    bool
+        Whether the PDF was created or changed
     """
     converter = NotebookConverter(notebook_filepath, figure_widths, font_css)
     body = converter.render_body()
@@ -1403,11 +1408,20 @@ def convert_notebook(
                 'Scikit-Learn and PyTorch',
                 'creator': 'handson-mlp-notes',
                 'producer': f'PyMuPDF {pymupdf.__version__}',
+                'creationDate': '',
+                'modDate': '',
             }
         )
-        pdf_filepath.parent.mkdir(parents=True, exist_ok=True)
-        doc.save(pdf_filepath, garbage=3, deflate=True)
+        # No dates or random file ID, so unchanged notebooks give
+        # byte-identical PDFs
+        doc.xref_set_key(-1, 'ID', 'null')
+        data = doc.tobytes(garbage=3, deflate=True, no_new_id=True)
         doc.close()
+    if pdf_filepath.is_file() and pdf_filepath.read_bytes() == data:
+        return False
+    pdf_filepath.parent.mkdir(parents=True, exist_ok=True)
+    pdf_filepath.write_bytes(data)
+    return True
 
 
 def main(
@@ -1421,6 +1435,7 @@ def main(
     ebook_dir: Annotated[
         Optional[Path], typer.Option(exists=True, file_okay=False)
     ] = None,
+    fail_on_change: bool = False,
 ) -> None:
     """
     Converts Jupyter Notebooks into PDFs that look like the book.
@@ -1436,20 +1451,29 @@ def main(
     ebook_dir:
         An extracted EPUB of the book, used for the figure widths
         (defaults to ``ebook_mlp`` when it exists)
+    fail_on_change:
+        Exit with status 1 when a PDF is created or changed (used by the
+        pre-commit hook, which does not notice new untracked files)
     """
     chrome_path = find_chrome(chrome)
     figure_widths = _ebook_figure_widths(ebook_dir or ROOT_DIR / 'ebook_mlp')
     font_css = font_face_css()
+    changed = False
     for notebook_filepath in notebook_filepaths:
         pdf_filepath = output_dir / f'{notebook_filepath.stem}.pdf'
-        convert_notebook(
+        if convert_notebook(
             notebook_filepath,
             pdf_filepath,
             chrome_path,
             figure_widths,
             font_css,
-        )
-        typer.echo(f'{notebook_filepath} -> {pdf_filepath}')
+        ):
+            changed = True
+            typer.echo(f'{notebook_filepath} -> {pdf_filepath}')
+        else:
+            typer.echo(f'{pdf_filepath} is up to date')
+    if fail_on_change and changed:
+        raise typer.Exit(1)
 
 
 if __name__ == '__main__':
