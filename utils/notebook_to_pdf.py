@@ -92,6 +92,7 @@ CAPTION_RE = re.compile(
 CHAPTER_RE = re.compile(r'Chapter\s+(?P<number>\d+)\s*[-–—:]\s*(?P<title>.+)')
 BADGE_RE = re.compile(r'^\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)[ \t]*\n?', re.M)
 CENTER_IMG_RE = re.compile(r'<center>\s*(<img\b.*?>)\s*</center>', re.S)
+STYLE_TAG_RE = re.compile(r'<style\b[^>]*>.*?</style>[ \t]*\n?', re.S)
 SIDEBAR_RE = re.compile(
     r'\A\s*<div\s+style="(?P<style>[^"]*border[^"]*)">[ \t]*\n'
     r'(?P<body>.*?)\n?\s*</div>\s*\Z',
@@ -630,6 +631,8 @@ class NotebookConverter:
         for cell in self.notebook['cells']:
             source = _join(cell.get('source', ''))
             if cell['cell_type'] == 'markdown':
+                # Jupyter-only styling, it would apply to the whole PDF
+                source = STYLE_TAG_RE.sub('', source)
                 match = SIDEBAR_RE.match(source)
                 if match:
                     style = match['style'].replace(' ', '')
@@ -850,12 +853,7 @@ class NotebookConverter:
         if 'text/html' in data and 'class="dataframe"' in _join(
             data['text/html']
         ):
-            content = re.sub(
-                r'<style[^>]*>.*?</style>',
-                '',
-                _join(data['text/html']),
-                flags=re.S,
-            )
+            content = STYLE_TAG_RE.sub('', _join(data['text/html']))
             return f'<div class="output-html">{content}</div>'
         if 'text/markdown' in data:
             return self.md.render(_join(data['text/markdown']), {})
