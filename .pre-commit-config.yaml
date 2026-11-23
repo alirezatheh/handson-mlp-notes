@@ -1,6 +1,9 @@
 ci:
   autofix_prs: false
   autoupdate_commit_msg: Update pre-commit hooks
+  # pre-commit.ci has neither Chrome nor the book's fonts
+  skip:
+    - notebook-to-pdf
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -99,3 +102,27 @@ repos:
           # ANN401 Dynamically typed expressions (typing.Any) are disallowed
           # W503 Line break before binary operator
           - --ignore=D100,D101,D102,D103,D105,D200,D205,D301,D400,D401,E203,E402,ANN002,ANN003,ANN101,ANN102,ANN401,W503
+  - repo: local
+    hooks:
+      - id: sort-execution-counts
+        name: sort execution counts
+        entry: python utils/sort_execution_counts.py
+        language: python
+        additional_dependencies:
+          - typer
+        files: ^notebooks/.*\.ipynb$
+      # Needs Chrome and the book's fonts, see utils/notebook_to_pdf.py
+      - id: notebook-to-pdf
+        name: notebook to pdf
+        entry: python utils/notebook_to_pdf.py --fail-on-change
+        language: python
+        additional_dependencies:
+          - fonttools
+          - latex2mathml
+          - markdown-it-py
+          - mdit-py-plugins
+          - pygments
+          - pymupdf
+          - typer
+        files: ^notebooks/.*\.ipynb$
+        require_serial: true
