@@ -112,6 +112,10 @@ ol > li::before {
   right: calc(100% + 5.3pt);
   white-space: nowrap;
 }
+/* Lists without bullets read as the book's term/description lists */
+ul.plain > li::before { content: none; }
+p + ul.plain, p + ul.plain > li:first-child { margin-top: 0; }
+ul.plain + p { margin-top: 7pt; }
 h2 + ul, h2 + ol { margin-top: 4.7pt; }
 h3 + ul, h3 + ol { margin-top: 3.7pt; }
 h4 + ul, h4 + ol, h5 + ul, h5 + ol { margin-top: 4pt; }

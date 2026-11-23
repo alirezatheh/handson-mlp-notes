@@ -93,6 +93,11 @@ CHAPTER_RE = re.compile(r'Chapter\s+(?P<number>\d+)\s*[-–—:]\s*(?P<title>.+)
 BADGE_RE = re.compile(r'^\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)[ \t]*\n?', re.M)
 CENTER_IMG_RE = re.compile(r'<center>\s*(<img\b.*?>)\s*</center>', re.S)
 STYLE_TAG_RE = re.compile(r'<style\b[^>]*>.*?</style>[ \t]*\n?', re.S)
+# ``ul {list-style-type: none;}``, or ``*:not(li) > ul {...}`` for only
+# the top level lists
+PLAIN_LISTS_RE = re.compile(
+    r'(?P<top>\*:not\(li\)\s*>\s*)?ul\s*\{\s*list-style(?:-type)?:\s*none'
+)
 SIDEBAR_RE = re.compile(
     r'\A\s*<div\s+style="(?P<style>[^"]*border[^"]*)">[ \t]*\n'
     r'(?P<body>.*?)\n?\s*</div>\s*\Z',
@@ -214,6 +219,18 @@ def _png_size(data: bytes) -> tuple[int, int]:
 
 def _join(text: str | list[str]) -> str:
     return text if isinstance(text, str) else ''.join(text)
+
+
+def _plain_lists(source: str) -> Optional[str]:
+    """
+    Which bullet lists the style tags of a markdown cell hide the
+    bullets of: ``'all'``, only the ``'top'`` level ones, or none.
+    """
+    plain = None
+    for tag in STYLE_TAG_RE.findall(source):
+        for match in PLAIN_LISTS_RE.finditer(tag):
+            plain = 'top' if match['top'] and plain != 'all' else 'all'
+    return plain
 
 
 def _separate_math_blocks(source: str) -> str:
@@ -631,7 +648,9 @@ class NotebookConverter:
         for cell in self.notebook['cells']:
             source = _join(cell.get('source', ''))
             if cell['cell_type'] == 'markdown':
-                # Jupyter-only styling, it would apply to the whole PDF
+                # The cell's style tags would apply to the whole PDF,
+                # only the hidden list bullets are kept
+                plain_lists = _plain_lists(source)
                 source = STYLE_TAG_RE.sub('', source)
                 match = SIDEBAR_RE.match(source)
                 if match:
@@ -639,13 +658,15 @@ class NotebookConverter:
                     if sidebar is None:
                         sidebar = _Sidebar(parts=[])
                     sidebar.parts.append(
-                        self._markdown_cell(match['body'], sidebar)
+                        self._markdown_cell(
+                            match['body'], sidebar, plain_lists
+                        )
                     )
                     if 'border-bottom:none' not in style:
                         body.append(self._close_sidebar(sidebar))
                         sidebar = None
                     continue
-                rendered = self._markdown_cell(source, sidebar)
+                rendered = self._markdown_cell(source, sidebar, plain_lists)
             elif cell['cell_type'] == 'code':
                 rendered = self._code_cell(cell)
             else:
@@ -752,6 +773,7 @@ class NotebookConverter:
             'heading_close': self._render_heading_close,
             'paragraph_open': self._render_paragraph_open,
             'paragraph_close': self._render_paragraph_close,
+            'bullet_list_open': self._render_bullet_list_open,
             'code_block': self._render_code_block,
             'fence': self._render_fence,
             'math_inline': self._render_math_inline,
@@ -778,11 +800,17 @@ class NotebookConverter:
 
         return rule
 
-    def _markdown_cell(self, source: str, sidebar: Optional[_Sidebar]) -> str:
+    def _markdown_cell(
+        self,
+        source: str,
+        sidebar: Optional[_Sidebar],
+        plain_lists: Optional[str] = None,
+    ) -> str:
         source = BADGE_RE.sub('', source)
         source = CENTER_IMG_RE.sub(self._figure, source)
         source = _separate_math_blocks(source)
-        return self.md.render(source, {'sidebar': sidebar})
+        env = {'sidebar': sidebar, 'plain_lists': plain_lists}
+        return self.md.render(source, env)
 
     def _close_sidebar(self, sidebar: _Sidebar) -> str:
         return '<div class="sidebar">\n' + '\n'.join(sidebar.parts) + '</div>'
@@ -1032,6 +1060,25 @@ class NotebookConverter:
         if mark is None:
             return renderer.renderToken(tokens, idx, options, env)
         return '</p></div></div>\n' if mark[0] == 'admonition' else '</p>\n'
+
+    def _render_bullet_list_open(
+        self,
+        renderer: RendererHTML,
+        tokens: list[Token],
+        idx: int,
+        options: Any,
+        env: dict[str, Any],
+    ) -> str:
+        plain = env.get('plain_lists')
+        if plain == 'top':
+            depth = sum(
+                {'list_item_open': 1, 'list_item_close': -1}.get(t.type, 0)
+                for t in tokens[:idx]
+            )
+            plain = None if depth else plain
+        if plain:
+            tokens[idx].attrJoin('class', 'plain')
+        return renderer.renderToken(tokens, idx, options, env)
 
     def _render_code_block(
         self,
