@@ -12,3 +12,6 @@ datasets
 
 # Models
 my_*
+
+# Generated PDFs
+pdfs

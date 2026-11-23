@@ -1,0 +1,7 @@
+fonttools
+latex2mathml
+markdown-it-py
+mdit-py-plugins
+pygments
+pymupdf
+typer
