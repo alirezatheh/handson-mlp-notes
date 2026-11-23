@@ -2,6 +2,7 @@ fonttools
 latex2mathml
 markdown-it-py
 mdit-py-plugins
+pre-commit
 pygments
 pymupdf
 typer

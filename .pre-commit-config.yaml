@@ -103,7 +103,7 @@ repos:
           # ANN401 Dynamically typed expressions (typing.Any) are disallowed
           # W503 Line break before binary operator
           - --ignore=D100,D101,D102,D103,D105,D200,D205,D301,D400,D401,E203,E402,ANN002,ANN003,ANN101,ANN102,ANN401,W503
-  # Run with the project's venv (requirements/main.txt and pdf.txt)
+  # Run with the project's venv (requirements/main.txt and develop.txt)
   - repo: local
     hooks:
       - id: sort-execution-counts
